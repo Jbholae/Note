@@ -1,90 +1,270 @@
-/* eslint-disable react/jsx-curly-brace-presence */
-import Head from "next/head"
-import { Button, TableComponent } from "@project/shared"
 import styled from "styled-components"
-import { useTranslation } from "react-i18next"
-import PencilIcon from "../public/assets/icons/pencil.svg"
+import { DndProvider, useDrag, useDrop } from "react-dnd"
+import { useRef, useState } from "react"
+import { HTML5Backend } from "react-dnd-html5-backend"
+import { COLUMN_NAMES, tasks } from "@project/shared/src/utils"
 
-const Container = styled.section`
+const Container = styled.div`
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+
   padding: 1em 2em;
+
+  .column {
+    height: max-content;
+    min-height: 100px;
+    width: 160px;
+    margin: 10px;
+    border-radius: 10px;
+    box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+    border: 2px solid #7d7d7d; /* Параметры границы */
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .do-it-column {
+    background-color: #fff0f0;
+  }
+
+  .in-progress-column {
+    background-color: #fef2e7;
+  }
+
+  .awaiting-review-column {
+    background-color: #fffada;
+  }
+
+  .done-column {
+    background-color: #f5ffe5;
+  }
+
+  .movable-item {
+    border-radius: 5px;
+    background-color: #fafdff;
+    height: 100px;
+    width: 140px;
+    margin: 10px auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0px 0px 3px rgba(0, 0, 0, 0.5);
+  }
 
   .table {
     background-color: black;
   }
 `
 
-const Home = () => {
-  const { t } = useTranslation()
+const MovableItem = ({
+  name,
+  index,
+  currentColumnName,
+  moveCardHandler,
+  setItems,
+}) => {
+  const changeItemColumn = (currentItem, columnName) => {
+    setItems((prevState) => {
+      return prevState.map((e) => {
+        return {
+          ...e,
+          column: e.name === currentItem.name ? columnName : e.column,
+        }
+      })
+    })
+  }
 
-  const columns = [
-    {
-      title: `${t("Date&time")}`,
-      dataIndex: "date",
-      key: "date",
-    },
-    {
-      title: `${t("Inquiry type")}`,
-      dataIndex: "inquiry_type",
-      key: "inquiry_type",
-    },
-    {
-      title: `${t("Hope for phone")}`,
-      dataIndex: "hope_for_phone",
-      key: "hope_for_phone",
-    },
-    {
-      title: `${t("Member")}`,
-      dataIndex: "name",
-      key: "name",
-      render: () => {
-        return "id"
-      },
-    },
-    {
-      title: `${t("Email address")}`,
-      dataIndex: "email",
-      key: "email",
-    },
+  const ref = useRef(null)
 
-    {
-      title: `${t("Action")}`,
-      dataIndex: "action",
-      key: "id",
-      render: () => {
-        return "edit"
-      },
+  const [, drop] = useDrop({
+    accept: "Our first type",
+    hover(item, monitor) {
+      if (!ref.current) {
+        return
+      }
+      const dragIndex = item.index
+      const hoverIndex = index
+      // Don't replace items with themselves
+      if (dragIndex === hoverIndex) {
+        return
+      }
+      // Determine rectangle on screen
+      const hoverBoundingRect = ref.current?.getBoundingClientRect()
+      // Get vertical middle
+      const hoverMiddleY =
+        (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2
+      // Determine mouse position
+      const clientOffset = monitor.getClientOffset()
+      // Get pixels to the top
+      const hoverClientY = clientOffset.y - hoverBoundingRect.top
+      // Only perform the move when the mouse has crossed half of the items height
+      // When dragging downwards, only move when the cursor is below 50%
+      // When dragging upwards, only move when the cursor is above 50%
+      // Dragging downwards
+      if (dragIndex < hoverIndex && hoverClientY < hoverMiddleY) {
+        return
+      }
+      // Dragging upwards
+      if (dragIndex > hoverIndex && hoverClientY > hoverMiddleY) {
+        return
+      }
+      // Time to actually perform the action
+      moveCardHandler(dragIndex, hoverIndex)
+      // Note: we're mutating the monitor item here!
+      // Generally it's better to avoid mutations,
+      // but it's good here for the sake of performance
+      // to avoid expensive index searches.
+      item.index = hoverIndex
     },
-  ]
+  })
 
-  const dataSource = [
-    {
-      key: 1,
-      id: 11,
-      date: "2022",
-      inquiry_type: "yes",
-      userId: "idd",
-      name: "Hero",
-      email: "Hero@g.com",
-      hope_for_phone: "909",
+  const [{ isDragging }, drag] = useDrag({
+    item: { index, name, currentColumnName, type: "Our first type" },
+    end: (item, monitor) => {
+      const dropResult = monitor.getDropResult()
+
+      if (dropResult) {
+        const { name } = dropResult
+        const { DO_IT, IN_PROGRESS, AWAITING_REVIEW, DONE } = COLUMN_NAMES
+        switch (name) {
+          case IN_PROGRESS:
+            changeItemColumn(item, IN_PROGRESS)
+            break
+          case AWAITING_REVIEW:
+            changeItemColumn(item, AWAITING_REVIEW)
+            break
+          case DONE:
+            changeItemColumn(item, DONE)
+            break
+          case DO_IT:
+            changeItemColumn(item, DO_IT)
+            break
+          default:
+            break
+        }
+      }
     },
-  ]
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  })
+
+  const opacity = isDragging ? 0.4 : 1
+
+  drag(drop(ref))
 
   return (
-    <>
-      <Head>
-        <title>{"HomePage | Consumer "}</title>
-      </Head>
-      <Container>
-        <h1>{"This is the Home Page"}</h1>
-        <Button>{t("Hello")}</Button>
-        <PencilIcon />
-        <TableComponent
-          columns={columns}
-          dataSource={dataSource}
-          className="table"
+    <div ref={ref} className={"movable-item"} style={{ opacity }}>
+      {name}
+    </div>
+  )
+}
+
+const Column = ({ children, className, title }) => {
+  const [{ isOver, canDrop }, drop] = useDrop({
+    accept: "Our first type",
+    drop: () => ({ name: title }),
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+      canDrop: monitor.canDrop(),
+    }),
+    // Override monitor.canDrop() function
+    canDrop: (item) => {
+      const { DO_IT, IN_PROGRESS, AWAITING_REVIEW, DONE } = COLUMN_NAMES
+      const { currentColumnName } = item
+      return (
+        currentColumnName === title ||
+        (currentColumnName === DO_IT && title === IN_PROGRESS) ||
+        (currentColumnName === IN_PROGRESS &&
+          (title === DO_IT || title === AWAITING_REVIEW)) ||
+        (currentColumnName === AWAITING_REVIEW &&
+          (title === IN_PROGRESS || title === DONE)) ||
+        (currentColumnName === DONE && title === AWAITING_REVIEW)
+      )
+    },
+  })
+
+  const getBackgroundColor = () => {
+    if (isOver) {
+      if (canDrop) {
+        return "rgb(188,251,255)"
+      } else if (!canDrop) {
+        return "rgb(255,188,188)"
+      }
+    } else {
+      return ""
+    }
+  }
+
+  return (
+    <div
+      ref={drop}
+      className={className}
+      style={{ backgroundColor: getBackgroundColor() }}
+    >
+      <p>{title}</p>
+      {children}
+    </div>
+  )
+}
+
+const Home = () => {
+  const [items, setItems] = useState(tasks)
+
+  const moveCardHandler = (dragIndex, hoverIndex) => {
+    const dragItem = items[dragIndex]
+
+    if (dragItem) {
+      setItems((prevState) => {
+        const coppiedStateArray = [...prevState]
+
+        const prefItem = coppiedStateArray.splice(hoverIndex, 1, dragIndex)
+
+        coppiedStateArray.splice(dragIndex, 1, prefItem[0])
+
+        return coppiedStateArray
+      })
+    }
+  }
+
+  const returnItemsForColumn = (columnName) => {
+    return items
+      .filter((item) => item.column === columnName)
+      .map((item, index) => (
+        <MovableItem
+          key={item.id}
+          name={item.name}
+          currentColumnName={item.column}
+          setItems={setItems}
+          index={index}
+          moveCardHandler={moveCardHandler}
         />
-      </Container>
-    </>
+      ))
+  }
+
+  const { DO_IT, IN_PROGRESS, AWAITING_REVIEW, DONE } = COLUMN_NAMES
+
+  return (
+    <Container>
+      <DndProvider backend={HTML5Backend}>
+        <Column title={DO_IT} className={"column do-it-column"}>
+          {returnItemsForColumn(DO_IT)}
+        </Column>
+        <Column title={IN_PROGRESS} className={"column in-progress-column"}>
+          {returnItemsForColumn(IN_PROGRESS)}
+        </Column>
+        <Column
+          title={AWAITING_REVIEW}
+          className={"column awaiting-review-column"}
+        >
+          {returnItemsForColumn(AWAITING_REVIEW)}
+        </Column>
+        <Column title={DONE} className={"column done-column"}>
+          {returnItemsForColumn(DONE)}
+        </Column>
+      </DndProvider>
+    </Container>
   )
 }
 
